@@ -1,4 +1,14 @@
-# Conversão Diária ETL — V2
+> ⚠️ **DESCONTINUADO em 22/05/2026.** Esta abordagem (Python + GitHub Actions
+> + Service Account) foi abandonada porque o usuário não tem permissão de
+> Admin nos GA4 properties para autorizar a SA. Reescrita em Google Apps
+> Script vive em [`../apps-script/`](../apps-script/).
+>
+> Este diretório permanece como referência das decisões de schema e
+> estrutura, mas o código aqui não é executado.
+
+---
+
+# Conversão Diária ETL — V2 (Python — descontinuado)
 
 Pipeline diário que coleta dados de GA4 (web + app) e RevenueCat e escreve em
 um Google Sheets estruturado em 7 abas. Roda às 6h BRT via GitHub Actions cron,
