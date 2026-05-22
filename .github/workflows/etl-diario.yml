@@ -1,0 +1,55 @@
+name: ETL Conversão Diária
+
+on:
+  schedule:
+    # 09:00 UTC = 06:00 BRT (Brasil não tem horário de verão desde 2019).
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    # Permite disparar manualmente pelo botão "Run workflow" na aba Actions.
+
+concurrency:
+  group: etl-diario
+  cancel-in-progress: false
+
+jobs:
+  run-etl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Materialize service-account.json
+        env:
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          echo "$GCP_SA_KEY_B64" | base64 -d > "$RUNNER_TEMP/service-account.json"
+          test -s "$RUNNER_TEMP/service-account.json" || (echo "::error::service-account.json vazio — secret GCP_SA_KEY_B64 ausente ou mal formado" && exit 1)
+
+      - name: Run ETL
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          GA4_WEB_PROPERTY_ID: ${{ secrets.GA4_WEB_PROPERTY_ID }}
+          GA4_APP_PROPERTY_ID: ${{ secrets.GA4_APP_PROPERTY_ID }}
+          SHEETS_DOC_ID: ${{ secrets.SHEETS_DOC_ID }}
+          REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+          REPROCESS_DAYS: "3"
+          TIMEZONE: America/Sao_Paulo
+        run: python main.py
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"

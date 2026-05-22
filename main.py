@@ -1,4 +1,4 @@
-"""Entrypoint Cloud Function — Conversão Diária V2.
+"""Entrypoint do ETL — Conversão Diária V2.
 
 Versão atual: smoke test de autenticação. Sem extração, sem transformação.
 O objetivo é só provar que a Service Account consegue:
@@ -7,11 +7,11 @@ O objetivo é só provar que a Service Account consegue:
   3. Abrir o Google Sheets de destino
   4. (opcional) Ler RevenueCat se as env vars estiverem setadas
 
-Roda localmente:
+Execução:
     python main.py
 
-Roda no Cloud Functions:
-    POST /  →  status 200 com body JSON dos checks
+Em produção roda como step de um workflow do GitHub Actions agendado em cron
+(ver .github/workflows/etl-diario.yml).
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ import logging
 import os
 from typing import Any
 
-import functions_framework
 from google.oauth2 import service_account
 
 logging.basicConfig(
@@ -38,7 +37,7 @@ SHEETS_SCOPES = [
 
 
 def _load_credentials(scopes: list[str]):
-    """Local: usa GOOGLE_APPLICATION_CREDENTIALS. Cloud Functions: ADC injetado."""
+    """Carrega credenciais da SA. Procura GOOGLE_APPLICATION_CREDENTIALS; cai pra ADC."""
     key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if key_path and os.path.exists(key_path):
         return service_account.Credentials.from_service_account_file(key_path, scopes=scopes)
@@ -101,7 +100,7 @@ def _check_revenuecat(project_id: str, api_key: str) -> dict[str, Any]:
     return {"project_id": project_id, "status_code": r.status_code, "ok": True}
 
 
-def _run_smoke_test() -> tuple[dict[str, Any], int]:
+def run_smoke_test() -> tuple[dict[str, Any], int]:
     checks: dict[str, Any] = {}
     errors: list[str] = []
 
@@ -160,13 +159,7 @@ def _run_smoke_test() -> tuple[dict[str, Any], int]:
     return body, status_code
 
 
-@functions_framework.http
-def main(request):
-    body, status = _run_smoke_test()
-    return (body, status, {"Content-Type": "application/json; charset=utf-8"})
-
-
 if __name__ == "__main__":
-    body, status = _run_smoke_test()
+    body, status = run_smoke_test()
     print(json.dumps(body, indent=2, ensure_ascii=False))
     raise SystemExit(0 if status == 200 else 1)
