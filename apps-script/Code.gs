@@ -132,29 +132,37 @@ function _checkSheets(docId) {
 }
 
 function _checkRevenueCat(projectId, apiKey) {
-  // (1) Lista projetos — valida API key
+  let projectName = null;
+  let listingStatus;
+
+  // (1) Tenta listar projetos — opcional. 403 (sem escopo projects:read) é OK.
   const listResp = _rcGet('/v2/projects?limit=50', apiKey);
-  if (listResp.code !== 200) {
-    throw new Error('API key invalida ou sem permissao: HTTP ' + listResp.code +
+  if (listResp.code === 200) {
+    const data = JSON.parse(listResp.body);
+    const projects = data.items || data.data || [];
+    let found = null;
+    for (let i = 0; i < projects.length; i++) {
+      if (projects[i].id === projectId) { found = projects[i]; break; }
+    }
+    if (!found) {
+      const ids = projects.map(function (p) {
+        return p.id + ' (' + (p.name || '?') + ')';
+      }).join(', ');
+      throw new Error('project_id "' + projectId + '" nao esta visivel. ' +
+                      'IDs disponiveis: [' + ids + ']');
+    }
+    projectName = found.name;
+    listingStatus = 'ok';
+  } else if (listResp.code === 403) {
+    listingStatus = 'sem escopo projects:read (ok — nao e necessario pro ETL)';
+  } else if (listResp.code === 401) {
+    throw new Error('API key invalida: HTTP 401 — ' + listResp.body.slice(0, 200));
+  } else {
+    throw new Error('Erro inesperado ao listar projetos: HTTP ' + listResp.code +
                     ' — ' + listResp.body.slice(0, 200));
   }
-  const data = JSON.parse(listResp.body);
-  const projects = data.items || data.data || [];
 
-  // (2) Confere se o project_id configurado existe nessa lista
-  let found = null;
-  for (let i = 0; i < projects.length; i++) {
-    if (projects[i].id === projectId) { found = projects[i]; break; }
-  }
-  if (!found) {
-    const ids = projects.map(function (p) {
-      return p.id + ' (' + (p.name || '?') + ')';
-    }).join(', ');
-    throw new Error('project_id "' + projectId + '" nao esta visivel para esta key. ' +
-                    'IDs disponiveis: [' + ids + ']');
-  }
-
-  // (3) Confere acesso ao endpoint que o ETL realmente usa
+  // (2) Check do endpoint que o ETL realmente usa — este é obrigatorio
   const evResp = _rcGet('/v2/projects/' + encodeURIComponent(projectId) + '/events?limit=1', apiKey);
   if (evResp.code !== 200) {
     throw new Error('Sem acesso a /events do projeto: HTTP ' + evResp.code +
@@ -162,8 +170,10 @@ function _checkRevenueCat(projectId, apiKey) {
   }
 
   return {
-    project_id:   projectId,
-    project_name: found.name,
+    project_id:    projectId,
+    project_name:  projectName || '(nao recuperado — sem escopo projects:read)',
+    listing_check: listingStatus,
+    events_check:  'ok',
     ok: true,
   };
 }
