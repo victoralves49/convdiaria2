@@ -82,3 +82,43 @@ const SHEET_TABS_ORDER = [
   'web_legado',
   'notas',
 ];
+
+// --- Schemas das abas --------------------------------------------------------
+
+const TOTAL_HEADERS = [
+  'Dia da Semana', 'Data', 'Status',
+  'Visitantes Únicos', 'Novos Usuários', 'Vendas Novas', 'Renovações',
+];
+
+// Web Desktop / Web Mobile / Web Total / Web Legado Agregado — schema idêntico.
+const WEB_HEADERS = [
+  'Dia da Semana', 'Data', 'Visitantes Únicos', 'Cadastros',
+  'Visitantes LP', 'Visitantes Checkout', 'Vendas',
+  'Conversão por Usuários Únicos', 'Conversão por Cadastros',
+  'Visitantes x LP', 'LP para Checkout', 'Conversão LP', 'Conversão Checkout',
+  'Visitantes Dados Pessoais P-1A', 'Dados Pessoais p/ Pagamento P-1A',
+  'Visitantes Pagamento P-1A', 'Pagamento p/ Obrigado P-1A',
+  'Obrigado P-1A', 'OBS',
+];
+
+const APP_HEADERS = [
+  'Dia da Semana', 'Data', 'Visit. Únicos App', 'Novos Usuários App',
+  'Vendas Novas Android', 'Vendas Novas iOS', 'Renovações App',
+  'Total App', 'OBS',
+];
+
+// Coluna (1-indexed) que guarda a Data em cada aba — usada pelo upsert.
+const DATE_COLUMN = 2;
+
+// Linha onde começam os dados em cada aba (1-indexed).
+//   Web Legado tem linha 1 = aviso vermelho, linha 2 = headers, linha 3 = dados.
+//   As demais abas têm linha 1 = headers, linha 2 = dados.
+const DATA_START_ROW = {
+  total:       2,
+  web_total:   2,
+  web_desktop: 2,
+  web_mobile:  2,
+  app:         2,
+  web_legado:  3,
+  notas:       1,
+};
