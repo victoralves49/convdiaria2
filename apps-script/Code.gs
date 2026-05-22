@@ -1,25 +1,72 @@
 // Code.gs
 // Entry points do ETL Conversão Diária V2.
 //
-//   runEtl()         — chamado pelo trigger diário (placeholder na fase 1)
-//   runSmokeTest()   — valida acesso GA4 web/app + Sheets (rodar manual)
-//   installTrigger() — cria/recria o trigger time-driven 6h BRT
-//   uninstallTriggers() — remove todos os triggers deste script
+//   runEtl()              — chamado pelo trigger diário 06:00 BRT. Janela D-1 a D-N.
+//   runEtlForRange(s, e)  — uso programático com Date objects.
+//   runEtlBackfill(s, e)  — uso manual no editor: strings 'YYYY-MM-DD'.
+//   runSmokeTest()        — valida acesso GA4 web/app + Sheets (sem escrever nada).
+//   installTrigger()      — cria/recria o trigger time-driven 06:00 BRT.
+//   uninstallTriggers()   — remove todos os triggers deste script.
 
-/** Trigger handler diário. Fase 1: só roda o smoke test. Fase 2: ETL real. */
+/**
+ * Trigger handler diário. Janela = D-1 a D-(REPROCESS_DAYS).
+ * Default REPROCESS_DAYS=3 → reescreve ontem, anteontem e tresdiasatrás.
+ */
 function runEtl() {
-  const r = runSmokeTest();
-  if (!r.ok) {
-    throw new Error('ETL abortado — smoke test falhou: ' + JSON.stringify(r.errors));
-  }
-  Logger.log('Fase 1 — só smoke test. ETL real será implementado na fase 2.');
+  const today = new Date();
+  const reproDays = parseInt(cfg('REPROCESS_DAYS'), 10) || 3;
+  const endDate   = _addDays(today, -1);
+  const startDate = _addDays(today, -reproDays);
+  return runEtlForRange(startDate, endDate);
 }
 
-/** Smoke test de leitura. Retorna {ok, checks, errors}. Use no editor pra validar. */
+/**
+ * ETL executado sobre um range arbitrário. Útil pra backfill rápido de
+ * alguns dias após resolver problema de fonte. NÃO usa pra grande backfill
+ * (~6 meses) — pode estourar timeout de 6min do Apps Script. Use o
+ * Scripts_Backfill.gs nesses casos.
+ *
+ * @param {Date} startDate
+ * @param {Date} endDate
+ * @returns {Object} estatísticas por aba
+ */
+function runEtlForRange(startDate, endDate) {
+  const rangeLabel = _isoDate(startDate) + ' → ' + _isoDate(endDate);
+  Logger.log('ETL iniciado. Range: ' + rangeLabel);
+
+  // 1. Extrair
+  const webData  = fetchGa4Web(startDate, endDate);
+  const appUsers = fetchGa4AppUsers(startDate, endDate);
+  const rcData   = {}; // RevenueCat desabilitado nesta fase
+
+  // 2. Transformar
+  const webDesktopRows = buildWebRows(webData.desktop);
+  const webMobileRows  = buildWebRows(webData.mobile);
+  const appRows        = buildAppRows(appUsers, rcData);
+
+  // 3. Carregar (upsert preservando colunas manuais)
+  const stats = {
+    range: [_isoDate(startDate), _isoDate(endDate)],
+    by_tab: {},
+  };
+  stats.by_tab[SHEET_TABS.web_desktop] = upsertRows(SHEET_TABS.web_desktop, webDesktopRows);
+  stats.by_tab[SHEET_TABS.web_mobile]  = upsertRows(SHEET_TABS.web_mobile,  webMobileRows);
+  stats.by_tab[SHEET_TABS.app]         = upsertRows(SHEET_TABS.app,         appRows);
+
+  SpreadsheetApp.flush();
+  Logger.log('ETL concluído. Stats: ' + JSON.stringify(stats, null, 2));
+  return stats;
+}
+
+/** Wrapper amigável pra rodar no editor: runEtlBackfill('2026-05-22', '2026-05-22') */
+function runEtlBackfill(startIso, endIso) {
+  return runEtlForRange(_dateFromIso(startIso), _dateFromIso(endIso));
+}
+
+/** Smoke test de leitura. Retorna {ok, checks, errors}. */
 function runSmokeTest() {
   const out = { ok: true, checks: {}, errors: [] };
 
-  // GA4 web
   try {
     out.checks.ga4_web = _checkGa4(cfg('GA4_WEB_PROPERTY_ID'), 'web');
   } catch (e) {
@@ -27,7 +74,6 @@ function runSmokeTest() {
     out.checks.ga4_web = { ok: false, error: e.message };
   }
 
-  // GA4 app
   try {
     out.checks.ga4_app = _checkGa4(cfg('GA4_APP_PROPERTY_ID'), 'app');
   } catch (e) {
@@ -35,7 +81,6 @@ function runSmokeTest() {
     out.checks.ga4_app = { ok: false, error: e.message };
   }
 
-  // Sheets
   try {
     out.checks.sheets = _checkSheets(cfg('SHEETS_DOC_ID'));
   } catch (e) {
@@ -43,7 +88,6 @@ function runSmokeTest() {
     out.checks.sheets = { ok: false, error: e.message };
   }
 
-  // RevenueCat — opcional nesta fase
   const rcProject = cfg('REVENUECAT_PROJECT_ID');
   const rcKey     = cfg('REVENUECAT_API_KEY');
   if (rcProject && rcKey) {
@@ -79,11 +123,10 @@ function _checkGa4(propertyId, label) {
 
 function _checkSheets(docId) {
   const ss = SpreadsheetApp.openById(docId);
-  const titles = ss.getSheets().map(function (s) { return s.getName(); });
   return {
     doc_id: docId,
     title: ss.getName(),
-    tabs: titles,
+    tabs: ss.getSheets().map(function (s) { return s.getName(); }),
     ok: true,
   };
 }
@@ -104,7 +147,7 @@ function _checkRevenueCat(projectId, apiKey) {
 
 // --- Trigger management ------------------------------------------------------
 
-/** Cria o trigger time-driven 06:00-07:00 BRT diário. Idempotente. */
+/** Cria o trigger time-driven 06:00 BRT diário. Idempotente. */
 function installTrigger() {
   uninstallTriggers();
   ScriptApp.newTrigger('runEtl')
@@ -121,4 +164,10 @@ function uninstallTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     ScriptApp.deleteTrigger(t);
   });
+}
+
+// --- Utility -----------------------------------------------------------------
+
+function _addDays(date, n) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
 }

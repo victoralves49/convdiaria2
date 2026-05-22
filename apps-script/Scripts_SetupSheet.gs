@@ -330,8 +330,3 @@ function _applyWebFormats(sheet, startRow, numRows) {
   // R: contagem
   sheet.getRange(startRow, 18, numRows, 1).setNumberFormat('#,##0');
 }
-
-function _daysBetween(a, b) {
-  const MS = 24 * 60 * 60 * 1000;
-  return Math.round((b.getTime() - a.getTime()) / MS);
-}
