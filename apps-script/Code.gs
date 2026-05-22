@@ -132,17 +132,49 @@ function _checkSheets(docId) {
 }
 
 function _checkRevenueCat(projectId, apiKey) {
-  const r = UrlFetchApp.fetch(
-    'https://api.revenuecat.com/v2/projects/' + encodeURIComponent(projectId),
-    {
-      method: 'get',
-      headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },
-      muteHttpExceptions: true,
-    }
-  );
-  const code = r.getResponseCode();
-  if (code !== 200) throw new Error('HTTP ' + code + ': ' + r.getContentText().slice(0, 200));
-  return { project_id: projectId, status_code: code, ok: true };
+  // (1) Lista projetos — valida API key
+  const listResp = _rcGet('/v2/projects?limit=50', apiKey);
+  if (listResp.code !== 200) {
+    throw new Error('API key invalida ou sem permissao: HTTP ' + listResp.code +
+                    ' — ' + listResp.body.slice(0, 200));
+  }
+  const data = JSON.parse(listResp.body);
+  const projects = data.items || data.data || [];
+
+  // (2) Confere se o project_id configurado existe nessa lista
+  let found = null;
+  for (let i = 0; i < projects.length; i++) {
+    if (projects[i].id === projectId) { found = projects[i]; break; }
+  }
+  if (!found) {
+    const ids = projects.map(function (p) {
+      return p.id + ' (' + (p.name || '?') + ')';
+    }).join(', ');
+    throw new Error('project_id "' + projectId + '" nao esta visivel para esta key. ' +
+                    'IDs disponiveis: [' + ids + ']');
+  }
+
+  // (3) Confere acesso ao endpoint que o ETL realmente usa
+  const evResp = _rcGet('/v2/projects/' + encodeURIComponent(projectId) + '/events?limit=1', apiKey);
+  if (evResp.code !== 200) {
+    throw new Error('Sem acesso a /events do projeto: HTTP ' + evResp.code +
+                    ' — ' + evResp.body.slice(0, 200));
+  }
+
+  return {
+    project_id:   projectId,
+    project_name: found.name,
+    ok: true,
+  };
+}
+
+function _rcGet(path, apiKey) {
+  const resp = UrlFetchApp.fetch('https://api.revenuecat.com' + path, {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },
+    muteHttpExceptions: true,
+  });
+  return { code: resp.getResponseCode(), body: resp.getContentText() };
 }
 
 // --- Trigger management ------------------------------------------------------
