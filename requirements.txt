@@ -1,0 +1,8 @@
+google-analytics-data==0.18.*
+google-cloud-secret-manager==2.20.*
+google-auth==2.*
+gspread==6.*
+requests==2.31.*
+pandas==2.*
+python-dateutil==2.*
+functions-framework==3.*
