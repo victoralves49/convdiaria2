@@ -62,6 +62,33 @@ function fetchRevenueCat(startDate, endDate) {
 }
 
 /**
+ * Lista os projetos visíveis à sua API key — útil pra descobrir o project_id
+ * correto quando o smoke test retorna 404.
+ *
+ *   listRevenueCatProjects()  → loga os projetos com seus IDs e nomes
+ */
+function listRevenueCatProjects() {
+  const apiKey = cfg('REVENUECAT_API_KEY');
+  if (!apiKey) throw new Error('Sem REVENUECAT_API_KEY em Script Properties');
+
+  const resp = UrlFetchApp.fetch(_RC_API_BASE + '/projects?limit=50', {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },
+    muteHttpExceptions: true,
+  });
+  Logger.log('HTTP ' + resp.getResponseCode());
+  Logger.log(resp.getContentText());
+
+  if (resp.getResponseCode() !== 200) return;
+  const data = JSON.parse(resp.getContentText());
+  const items = data.items || data.data || [];
+  Logger.log('--- Projetos encontrados (' + items.length + ') ---');
+  items.forEach(function (p) {
+    Logger.log('  id=' + p.id + '  name=' + p.name);
+  });
+}
+
+/**
  * Função utilitária pra rodar no editor e inspecionar a estrutura crua de
  * um evento RevenueCat. Use quando algo parecer estranho na agregação.
  *
