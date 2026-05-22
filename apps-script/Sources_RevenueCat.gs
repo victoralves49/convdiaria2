@@ -1,16 +1,21 @@
 // Sources_RevenueCat.gs
-// Extração de vendas Android, iOS e renovações via RevenueCat REST v2.
+// Extração de vendas Android, iOS e renovações via RevenueCat.
+//
+// ⚠ ATENÇÃO — esta implementação está INCORRETA:
+// o endpoint GET /v2/projects/{id}/events NÃO existe na API v2 do RevenueCat.
+// Confirmado em docs oficiais (https://www.revenuecat.com/docs/api-v2). A API
+// v2 expõe Charts/Metrics (revenue agregado) e Customers (one-by-one), mas
+// não tem stream de eventos REST. Alternativas conhecidas:
+//   A. Charts API: /v2/projects/{id}/charts/{chart_name} com resolution=DAY
+//   B. Webhooks → Apps Script doPost acumulando em aba paralela
+//
+// Comportamento atual: se REVENUECAT_PROJECT_ID e REVENUECAT_API_KEY NÃO
+// estiverem em Script Properties, retorna mapa zerado e o ETL segue
+// normalmente (Vendas Android/iOS/Renovações ficam em 0). Pra reativar o
+// RevenueCat, reescrever este arquivo conforme estratégia A ou B.
 //
 // fetchRevenueCat(startDate, endDate)
 //   → { 'YYYY-MM-DD': { vendas_android, vendas_ios, renovacoes } }
-//
-// Implementação: pagina /v2/projects/{id}/events filtrando por type, filtra
-// localmente por data (mais robusto a variações de query-string da API).
-// Para 3 dias de operação normal, retornam-se ~poucas centenas de eventos
-// — folgado em quota e tempo.
-//
-// Se REVENUECAT_PROJECT_ID ou REVENUECAT_API_KEY não estiverem em Script
-// Properties, retorna mapa zerado e loga o skip — nunca falha.
 
 const _RC_API_BASE = 'https://api.revenuecat.com/v2';
 const _RC_PAGE_LIMIT = 200;
