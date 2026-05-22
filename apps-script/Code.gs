@@ -37,7 +37,7 @@ function runEtlForRange(startDate, endDate) {
   // 1. Extrair
   const webData  = fetchGa4Web(startDate, endDate);
   const appUsers = fetchGa4AppUsers(startDate, endDate);
-  const rcData   = {}; // RevenueCat desabilitado nesta fase
+  const rcData   = fetchRevenueCat(startDate, endDate);
 
   // 2. Transformar
   const webDesktopRows = buildWebRows(webData.desktop);
